@@ -5,10 +5,10 @@
 
 #include <cstdint>
 
-// Animated robot eyes drawn with LVGL primitives (rounded rectangles and
-// triangles), so the face needs no image assets in flash. The eyes blink, look
-// around while idle, pulse while speaking and change shape and colour with the
-// emotion the server sends.
+// Animated robot face (eyes and mouth) drawn with LVGL primitives: rounded
+// rectangles, triangles and arcs, so it needs no image assets in flash. The
+// eyes blink, look around while idle and pulse while speaking; the mouth moves
+// while speaking. Both change shape and colour with the emotion the server sends.
 //
 // Every method must be called with the display lock held.
 class WalleFace {
@@ -36,6 +36,9 @@ private:
         float scale;      // overall eye size
         float left_open;  // per-eye multiplier, for winks
         float right_open;
+        float mouth_curve;  // -1 frown .. 1 smile, used while the mouth is closed
+        float mouth_open;   // 0 closed .. 1 wide open ("O")
+        float mouth_width;  // 1 = normal
     };
 
     struct EyeShape {
@@ -43,6 +46,14 @@ private:
         float lid_inner;
         float lid_outer;
         float smile;
+    };
+
+    struct MouthShape {
+        int32_t center_x;
+        int32_t center_y;
+        int32_t width;
+        int32_t open_height;
+        float curve;
     };
 
     struct Expression {
@@ -63,6 +74,7 @@ private:
     void Draw(lv_layer_t* layer);
     void DrawEye(lv_layer_t* layer, const EyeShape& eye, bool is_left);
     void DrawTear(lv_layer_t* layer, const EyeShape& eye, bool is_left);
+    void DrawMouth(lv_layer_t* layer);
 
     lv_obj_t* obj_ = nullptr;
     lv_timer_t* timer_ = nullptr;
@@ -88,7 +100,12 @@ private:
     float glance_x_ = 0.0f;
     float glance_y_ = 0.0f;
 
+    uint32_t next_syllable_ms_ = 0;
+    float syllable_ = 0.0f;
+    float talk_open_ = 0.0f;
+
     EyeShape eyes_[2] = {};
+    MouthShape mouth_ = {};
     lv_area_t drawn_area_ = {};
     bool has_drawn_area_ = false;
 };

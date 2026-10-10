@@ -12,6 +12,9 @@ constexpr uint32_t kFrameMs = 40;
 constexpr uint32_t kBlinkMs = 180;
 constexpr uint32_t kTearMs = 1400;
 constexpr int32_t kGlow = 10;
+constexpr int32_t kMouthStroke = 6;
+// How far the mouth can reach above or below its centre, glow included.
+constexpr int32_t kMouthReach = 28;
 constexpr float kEase = 0.28f;
 constexpr float kColorStep = 0.12f;
 constexpr float kTwoPi = 6.2831853f;
@@ -36,30 +39,64 @@ void Approach(float& value, float target) {
 
 }  // namespace
 
-// Fields: open, lid_inner, lid_outer, smile, look_x, look_y, scale, left_open, right_open.
+// Fields: open, lid_inner, lid_outer, smile, look_x, look_y, scale, left_open, right_open,
+// mouth_curve, mouth_open, mouth_width.
 const WalleFace::Expression WalleFace::kExpressions[] = {
-    {"neutral", {1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 1.0f, 1.0f, 1.0f}, kCyan, false},
-    {"robot_2", {1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 1.0f, 1.0f, 1.0f}, kCyan, false},
-    {"happy", {1.0f, 0.0f, 0.0f, 0.42f, 0, -2, 1.02f, 1.0f, 1.0f}, kCyan, false},
-    {"relaxed", {0.9f, 0.12f, 0.12f, 0.38f, 0, 0, 1.0f, 1.0f, 1.0f}, kCyan, false},
-    {"confident", {0.9f, 0.18f, 0.05f, 0.3f, 0, -2, 1.02f, 1.0f, 1.0f}, kCyan, false},
-    {"delicious", {1.0f, 0.0f, 0.0f, 0.45f, 0, -4, 1.05f, 1.0f, 1.0f}, kCyan, false},
-    {"laughing", {1.0f, 0.0f, 0.0f, 0.55f, 0, -4, 1.06f, 1.0f, 1.0f}, kCyan, false},
-    {"funny", {1.0f, 0.0f, 0.0f, 0.5f, 0, -3, 1.04f, 1.0f, 1.0f}, kCyan, false},
-    {"silly", {1.0f, 0.0f, 0.0f, 0.45f, 6, 0, 1.03f, 1.0f, 0.75f}, kCyan, false},
-    {"loving", {1.0f, 0.0f, 0.0f, 0.42f, 0, -2, 1.08f, 1.0f, 1.0f}, kPink, false},
-    {"kissy", {1.0f, 0.0f, 0.0f, 0.48f, 0, 0, 1.0f, 1.0f, 0.12f}, kPink, false},
-    {"winking", {1.0f, 0.0f, 0.0f, 0.35f, 0, 0, 1.02f, 1.0f, 0.1f}, kCyan, false},
-    {"cool", {0.85f, 0.38f, 0.38f, 0.0f, 8, 0, 1.0f, 1.0f, 1.0f}, kCyan, false},
-    {"sad", {0.85f, 0.05f, 0.4f, 0.0f, 0, 8, 0.95f, 1.0f, 1.0f}, kBlue, false},
-    {"crying", {0.8f, 0.05f, 0.45f, 0.0f, 0, 8, 0.95f, 1.0f, 1.0f}, kBlue, true},
-    {"angry", {0.9f, 0.5f, 0.05f, 0.0f, 0, 2, 1.0f, 1.0f, 1.0f}, kRed, false},
-    {"surprised", {1.12f, 0.0f, 0.0f, 0.0f, 0, -3, 1.16f, 1.0f, 1.0f}, kCyan, false},
-    {"shocked", {1.18f, 0.0f, 0.0f, 0.0f, 0, -4, 1.2f, 1.0f, 1.0f}, kWhite, false},
-    {"thinking", {0.9f, 0.15f, 0.05f, 0.0f, -14, -10, 0.98f, 1.0f, 1.0f}, kCyan, false},
-    {"confused", {0.95f, 0.25f, 0.0f, 0.0f, 6, -4, 1.0f, 1.0f, 0.72f}, kCyan, false},
-    {"embarrassed", {0.9f, 0.0f, 0.0f, 0.35f, -10, 8, 0.96f, 1.0f, 1.0f}, kBlush, false},
-    {"sleepy", {0.28f, 0.2f, 0.2f, 0.0f, 0, 6, 1.0f, 1.0f, 1.0f}, kDim, false},
+    {"neutral", {1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 1.0f, 1.0f, 1.0f, 0.2f, 0.0f, 0.8f}, kCyan, false},
+    {"robot_2", {1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 1.0f, 1.0f, 1.0f, 0.2f, 0.0f, 0.8f}, kCyan, false},
+    {"happy", {1.0f, 0.0f, 0.0f, 0.42f, 0, -2, 1.02f, 1.0f, 1.0f, 0.85f, 0.0f, 1.0f}, kCyan, false},
+    {"relaxed",
+     {0.9f, 0.12f, 0.12f, 0.38f, 0, 0, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f, 0.8f},
+     kCyan,
+     false},
+    {"confident",
+     {0.9f, 0.18f, 0.05f, 0.3f, 0, -2, 1.02f, 1.0f, 1.0f, 0.6f, 0.0f, 0.9f},
+     kCyan,
+     false},
+    {"delicious",
+     {1.0f, 0.0f, 0.0f, 0.45f, 0, -4, 1.05f, 1.0f, 1.0f, 0.8f, 0.25f, 0.8f},
+     kCyan,
+     false},
+    {"laughing",
+     {1.0f, 0.0f, 0.0f, 0.55f, 0, -4, 1.06f, 1.0f, 1.0f, 0.9f, 0.55f, 1.1f},
+     kCyan,
+     false},
+    {"funny", {1.0f, 0.0f, 0.0f, 0.5f, 0, -3, 1.04f, 1.0f, 1.0f, 0.8f, 0.35f, 1.0f}, kCyan, false},
+    {"silly", {1.0f, 0.0f, 0.0f, 0.45f, 6, 0, 1.03f, 1.0f, 0.75f, 0.7f, 0.3f, 0.9f}, kCyan, false},
+    {"loving", {1.0f, 0.0f, 0.0f, 0.42f, 0, -2, 1.08f, 1.0f, 1.0f, 0.7f, 0.0f, 0.8f}, kPink, false},
+    {"kissy", {1.0f, 0.0f, 0.0f, 0.48f, 0, 0, 1.0f, 1.0f, 0.12f, 0.0f, 0.35f, 0.35f}, kPink, false},
+    {"winking",
+     {1.0f, 0.0f, 0.0f, 0.35f, 0, 0, 1.02f, 1.0f, 0.1f, 0.75f, 0.0f, 0.9f},
+     kCyan,
+     false},
+    {"cool", {0.85f, 0.38f, 0.38f, 0.0f, 8, 0, 1.0f, 1.0f, 1.0f, 0.35f, 0.0f, 0.7f}, kCyan, false},
+    {"sad", {0.85f, 0.05f, 0.4f, 0.0f, 0, 8, 0.95f, 1.0f, 1.0f, -0.7f, 0.0f, 0.8f}, kBlue, false},
+    {"crying",
+     {0.8f, 0.05f, 0.45f, 0.0f, 0, 8, 0.95f, 1.0f, 1.0f, -0.85f, 0.2f, 0.9f},
+     kBlue,
+     true},
+    {"angry", {0.9f, 0.5f, 0.05f, 0.0f, 0, 2, 1.0f, 1.0f, 1.0f, -0.6f, 0.0f, 0.9f}, kRed, false},
+    {"surprised",
+     {1.12f, 0.0f, 0.0f, 0.0f, 0, -3, 1.16f, 1.0f, 1.0f, 0.0f, 0.75f, 0.55f},
+     kCyan,
+     false},
+    {"shocked",
+     {1.18f, 0.0f, 0.0f, 0.0f, 0, -4, 1.2f, 1.0f, 1.0f, 0.0f, 0.95f, 0.6f},
+     kWhite,
+     false},
+    {"thinking",
+     {0.9f, 0.15f, 0.05f, 0.0f, -14, -10, 0.98f, 1.0f, 1.0f, -0.15f, 0.0f, 0.45f},
+     kCyan,
+     false},
+    {"confused",
+     {0.95f, 0.25f, 0.0f, 0.0f, 6, -4, 1.0f, 1.0f, 0.72f, -0.35f, 0.0f, 0.6f},
+     kCyan,
+     false},
+    {"embarrassed",
+     {0.9f, 0.0f, 0.0f, 0.35f, -10, 8, 0.96f, 1.0f, 1.0f, 0.35f, 0.0f, 0.55f},
+     kBlush,
+     false},
+    {"sleepy", {0.28f, 0.2f, 0.2f, 0.0f, 0, 6, 1.0f, 1.0f, 1.0f, 0.0f, 0.18f, 0.35f}, kDim, false},
 };
 
 WalleFace::WalleFace(lv_obj_t* parent, int width, int height) : width_(width), height_(height) {
@@ -185,6 +222,20 @@ void WalleFace::Tick() {
         pulse_scale = 1.05f + 0.015f * sinf(kTwoPi * (now % 1600) / 1600.0f);
     }
 
+    // Talking mouth: a new random "syllable" every 80-160 ms, with short pauses.
+    if (mode_ == Mode::kSpeaking) {
+        if (now >= next_syllable_ms_) {
+            syllable_ = esp_random() % 6 == 0 ? 0.0f : 0.15f + RandomRange(0, 60) / 100.0f;
+            next_syllable_ms_ = now + RandomRange(80, 160);
+        }
+    } else {
+        syllable_ = 0.0f;
+    }
+    talk_open_ += (syllable_ - talk_open_) * 0.5f;
+    if (std::fabs(syllable_ - talk_open_) < 0.01f) {
+        talk_open_ = syllable_;
+    }
+
     Approach(current_.open, target_.open);
     Approach(current_.lid_inner, target_.lid_inner);
     Approach(current_.lid_outer, target_.lid_outer);
@@ -194,6 +245,9 @@ void WalleFace::Tick() {
     Approach(current_.scale, target_.scale);
     Approach(current_.left_open, target_.left_open);
     Approach(current_.right_open, target_.right_open);
+    Approach(current_.mouth_curve, target_.mouth_curve);
+    Approach(current_.mouth_open, target_.mouth_open);
+    Approach(current_.mouth_width, target_.mouth_width);
 
     bool color_changing = color_progress_ < 1.0f;
     if (color_changing) {
@@ -207,14 +261,16 @@ void WalleFace::Tick() {
 
     EyeShape previous[2];
     memcpy(previous, eyes_, sizeof(eyes_));
+    MouthShape previous_mouth = mouth_;
     UpdateShapes(blink, bob, pulse_open, pulse_scale);
 
-    bool changed = memcmp(previous, eyes_, sizeof(eyes_)) != 0 || color_changing || tear_;
+    bool changed = memcmp(previous, eyes_, sizeof(eyes_)) != 0 ||
+                   memcmp(&previous_mouth, &mouth_, sizeof(mouth_)) != 0 || color_changing || tear_;
     if (!changed && has_drawn_area_) {
         return;
     }
 
-    // Redraw only the band around the eyes: the union of the old and new areas.
+    // Redraw only the face: the union of the old and new areas.
     lv_area_t area = DirtyArea();
     if (has_drawn_area_) {
         lv_area_t dirty = area;
@@ -232,9 +288,9 @@ void WalleFace::Tick() {
 
 void WalleFace::UpdateShapes(float blink, float bob, float pulse_open, float pulse_scale) {
     const float base_w = width_ * 0.26f;
-    const float base_h = height_ * 0.36f;
+    const float base_h = height_ * 0.33f;
     const float gap = width_ * 0.15f;
-    const float center_y = height_ * 0.46f + current_.look_y + bob;
+    const float center_y = height_ * 0.40f + current_.look_y + bob;
     const float scale = current_.scale * pulse_scale;
 
     for (int i = 0; i < 2; i++) {
@@ -257,6 +313,14 @@ void WalleFace::UpdateShapes(float blink, float bob, float pulse_open, float pul
         eye.lid_outer = current_.lid_outer;
         eye.smile = current_.smile;
     }
+
+    // The mouth follows the gaze a little, so the face turns as one.
+    float open = std::max(current_.mouth_open, talk_open_);
+    mouth_.center_x = static_cast<int32_t>(width_ / 2.0f + current_.look_x * 0.6f);
+    mouth_.center_y = static_cast<int32_t>(height_ * 0.76f + current_.look_y * 0.5f + bob);
+    mouth_.width = static_cast<int32_t>(width_ * 0.2f * current_.mouth_width);
+    mouth_.open_height = static_cast<int32_t>(open * height_ * 0.11f);
+    mouth_.curve = current_.mouth_curve;
 }
 
 lv_area_t WalleFace::DirtyArea() const {
@@ -268,6 +332,9 @@ lv_area_t WalleFace::DirtyArea() const {
     if (tear_) {
         area.y2 += 44;
     }
+    area.y2 = std::max(area.y2, mouth_.center_y + kMouthReach);
+    area.x1 = std::min(area.x1, mouth_.center_x - mouth_.width / 2 - kGlow);
+    area.x2 = std::max(area.x2, mouth_.center_x + mouth_.width / 2 + kGlow);
     return area;
 }
 
@@ -278,6 +345,7 @@ void WalleFace::Draw(lv_layer_t* layer) {
             DrawTear(layer, eyes_[i], i == 0);
         }
     }
+    DrawMouth(layer);
 }
 
 void WalleFace::DrawEye(lv_layer_t* layer, const EyeShape& eye, bool is_left) {
@@ -410,4 +478,84 @@ void WalleFace::DrawTear(lv_layer_t* layer, const EyeShape& eye, bool is_left) {
     drop.bg_opa = static_cast<lv_opa_t>(255 * (1.0f - tear_phase_));
     lv_area_t area = {x, y, x + size, y + size + 3};
     lv_draw_rect(layer, &drop, &area);
+}
+
+void WalleFace::DrawMouth(lv_layer_t* layer) {
+    const MouthShape& m = mouth_;
+    if (m.width <= 0) {
+        return;
+    }
+    const int32_t half_w = m.width / 2;
+
+    if (m.open_height >= kMouthStroke) {
+        // Open mouth: a glowing ring with a dark inside.
+        lv_area_t outer;
+        lv_area_set(&outer, m.center_x - half_w, m.center_y - m.open_height / 2,
+                    m.center_x + half_w, m.center_y + m.open_height / 2);
+        lv_draw_rect_dsc_t dsc;
+        lv_draw_rect_dsc_init(&dsc);
+        dsc.radius = LV_RADIUS_CIRCLE;
+        dsc.bg_color = color_;
+        lv_area_t halo = outer;
+        lv_area_increase(&halo, kGlow / 2, kGlow / 2);
+        dsc.bg_opa = LV_OPA_20;
+        lv_draw_rect(layer, &dsc, &halo);
+        dsc.bg_opa = LV_OPA_COVER;
+        lv_draw_rect(layer, &dsc, &outer);
+
+        lv_area_t inner = outer;
+        lv_area_increase(&inner, -kMouthStroke / 2 - 1, -kMouthStroke / 2 - 1);
+        if (lv_area_get_height(&inner) > 2 && lv_area_get_width(&inner) > 2) {
+            dsc.bg_color = lv_color_black();
+            lv_draw_rect(layer, &dsc, &inner);
+        }
+        return;
+    }
+
+    if (std::fabs(m.curve) < 0.12f) {
+        // Flat mouth: a short pill.
+        lv_area_t line;
+        lv_area_set(&line, m.center_x - half_w, m.center_y - kMouthStroke / 2, m.center_x + half_w,
+                    m.center_y + kMouthStroke / 2);
+        lv_draw_rect_dsc_t dsc;
+        lv_draw_rect_dsc_init(&dsc);
+        dsc.radius = LV_RADIUS_CIRCLE;
+        dsc.bg_color = color_;
+        lv_area_t halo = line;
+        lv_area_increase(&halo, kGlow / 2, kGlow / 2);
+        dsc.bg_opa = LV_OPA_20;
+        lv_draw_rect(layer, &dsc, &halo);
+        dsc.bg_opa = LV_OPA_COVER;
+        lv_draw_rect(layer, &dsc, &line);
+        return;
+    }
+
+    // Smile or frown: an arc whose chord is the mouth width. A stronger curve
+    // uses a smaller circle, so the arc bends more.
+    float half_angle = asinf(std::min(0.95f, 0.83f * std::fabs(m.curve)));
+    float radius = half_w / sinf(half_angle);
+    float sag = radius * (1.0f - cosf(half_angle));
+    bool smile = m.curve > 0.0f;
+    float center_y = smile ? m.center_y + sag / 2.0f - radius : m.center_y - sag / 2.0f + radius;
+    float half_deg = half_angle * 180.0f / 3.14159265f;
+    float mid_deg = smile ? 90.0f : 270.0f;
+
+    lv_draw_arc_dsc_t arc;
+    lv_draw_arc_dsc_init(&arc);
+    arc.center.x = m.center_x;
+    arc.center.y = static_cast<int32_t>(center_y);
+    arc.start_angle = static_cast<lv_value_precise_t>(mid_deg - half_deg);
+    arc.end_angle = static_cast<lv_value_precise_t>(mid_deg + half_deg);
+    arc.rounded = 1;
+    arc.color = color_;
+
+    arc.width = kMouthStroke + kGlow;
+    arc.radius = static_cast<uint16_t>(radius + (kMouthStroke + kGlow) / 2.0f);
+    arc.opa = LV_OPA_20;
+    lv_draw_arc(layer, &arc);
+
+    arc.width = kMouthStroke;
+    arc.radius = static_cast<uint16_t>(radius + kMouthStroke / 2.0f);
+    arc.opa = LV_OPA_COVER;
+    lv_draw_arc(layer, &arc);
 }

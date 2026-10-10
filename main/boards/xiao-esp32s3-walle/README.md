@@ -71,10 +71,11 @@ HREF=47, PCLK=13; user LED=GPIO21.
 
 ## Face
 
-The screen shows animated eyes (`walle_face.cc`) instead of the default emoji.
-They're drawn with LVGL shapes, so they need no image assets. The eyes blink,
-glance around while idle, grow slightly while listening and pulse while
-speaking. Their shape and colour follow the `emotion` the server sends: for
+The screen shows an animated face (`walle_face.cc`) instead of the default
+emoji: two eyes and a mouth. They're drawn with LVGL shapes, so they need no
+image assets. The eyes blink, glance around while idle, grow slightly while
+listening and pulse while speaking. The mouth opens and closes while speaking.
+The face's shape and colour follow the `emotion` the server sends: for
 example happy, loving, sad, crying, angry, surprised, thinking, winking or
 sleepy. Unknown emotions show the neutral eyes. Alerts such as Wi-Fi setup, OTA
 or errors still show their status icon. What Pip says appears as a subtitle at
