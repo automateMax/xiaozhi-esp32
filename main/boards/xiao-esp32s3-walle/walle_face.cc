@@ -11,6 +11,7 @@ namespace {
 constexpr uint32_t kFrameMs = 40;
 constexpr uint32_t kBlinkMs = 180;
 constexpr uint32_t kTearMs = 1400;
+constexpr uint32_t kMoodHoldMs = 4000;
 constexpr int32_t kGlow = 10;
 constexpr int32_t kMouthStroke = 6;
 // How far the mouth can reach above or below its centre, glow included.
@@ -136,19 +137,35 @@ bool WalleFace::SetEmotion(const char* emotion) {
         return false;
     }
     for (const auto& expression : kExpressions) {
-        if (strcmp(expression.name, emotion) == 0) {
-            target_ = expression.pose;
-            tear_ = expression.tear;
-            lv_color_t color = lv_color_hex(expression.color);
-            if (!lv_color_eq(color, color_to_)) {
-                color_from_ = color_;
-                color_to_ = color;
-                color_progress_ = 0.0f;
-            }
+        if (strcmp(expression.name, emotion) != 0) {
+            continue;
+        }
+        // The application resets the face to neutral as soon as the device
+        // goes back to listening, which would hide each mood after a few
+        // seconds. Let a mood linger for a while before going neutral.
+        bool is_neutral = &expression == &kExpressions[0];
+        if (is_neutral && active_ != &kExpressions[0]) {
+            neutral_pending_ = true;
+            neutral_at_ms_ = lv_tick_get() + kMoodHoldMs;
             return true;
         }
+        neutral_pending_ = false;
+        Apply(expression);
+        return true;
     }
     return false;
+}
+
+void WalleFace::Apply(const Expression& expression) {
+    active_ = &expression;
+    target_ = expression.pose;
+    tear_ = expression.tear;
+    lv_color_t color = lv_color_hex(expression.color);
+    if (!lv_color_eq(color, color_to_)) {
+        color_from_ = color_;
+        color_to_ = color;
+        color_progress_ = 0.0f;
+    }
 }
 
 void WalleFace::SetMode(Mode mode) { mode_ = mode; }
@@ -178,6 +195,11 @@ void WalleFace::Tick() {
         return;
     }
     uint32_t now = lv_tick_get();
+
+    if (neutral_pending_ && static_cast<int32_t>(now - neutral_at_ms_) >= 0) {
+        neutral_pending_ = false;
+        Apply(kExpressions[0]);
+    }
 
     // Blink every few seconds, sometimes twice in a row.
     float blink = 1.0f;

@@ -68,6 +68,7 @@ private:
     static void TimerCallback(lv_timer_t* timer);
     static void DrawCallback(lv_event_t* e);
 
+    void Apply(const Expression& expression);
     void Tick();
     void UpdateShapes(float blink, float bob, float pulse_open, float pulse_scale);
     lv_area_t DirtyArea() const;
@@ -84,6 +85,9 @@ private:
     Pose current_;
     Pose target_;
     Mode mode_ = Mode::kIdle;
+    const Expression* active_ = &kExpressions[0];
+    bool neutral_pending_ = false;
+    uint32_t neutral_at_ms_ = 0;
     bool tear_ = false;
     float tear_phase_ = 0.0f;
     bool visible_ = true;
