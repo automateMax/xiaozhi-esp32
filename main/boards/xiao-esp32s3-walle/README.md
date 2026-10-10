@@ -81,17 +81,16 @@ sleepy. Unknown emotions show the neutral eyes. Alerts such as Wi-Fi setup, OTA
 or errors still show their status icon. What Pip says appears as a subtitle at
 the bottom of the screen.
 
-## Wake words and language
-
-The build listens for two English wake words, "Hi Wall-E" and "Jarvis",
-instead of the Chinese default, and shows its on-screen text in English.
-"Jarvis" was the more reliable of the two in testing.
-
 ## Build
 
 ```sh
-python3 scripts/build.py xiao-esp32s3-walle
+python3 scripts/build.py xiao-esp32s3-walle --language en-US --wake-word wn9_jarvis_tts
 ```
+
+`--language en-US` shows the on-screen text in English. `--wake-word
+wn9_jarvis_tts` replaces the Chinese default wake word with "Jarvis", which
+was reliable in testing on this board. `python3 scripts/build.py
+--list-wake-words` lists the other models (`wn9_hiwalle_tts2` is "Hi Wall-E").
 
 To flip or mirror the camera image, set the `camera_vflip` / `camera_hmirror`
 build options in `config.json`.
