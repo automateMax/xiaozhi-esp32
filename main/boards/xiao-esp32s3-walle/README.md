@@ -13,7 +13,7 @@ firmware, not Huy Vector's own firmware.
 | Part | Notes |
 |---|---|
 | Seeed Studio XIAO ESP32-S3 Sense | 8 MB flash, 8 MB octal PSRAM, onboard PDM mic and camera |
-| Camera | Stock OV2640, or Seeed's OV5640 module for the XIAO ESP32S3 Sense. Both are auto-detected |
+| Camera | Stock OV2640 or OV3660 (newer boards), or Seeed's OV5640 module for the XIAO ESP32S3 Sense. All three are auto-detected |
 | 1.54" 240x240 ST7789 SPI display | 8-pin module: GND VCC SCL SDA RST DC CS BL |
 | MAX98357A I2S amplifier + small speaker | The XIAO has no speaker output of its own |
 | MX1508 dual H-bridge (IN1-IN4) | Drives the two track motors |

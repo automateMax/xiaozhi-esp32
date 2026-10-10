@@ -50,7 +50,7 @@
 // Swap these if "left" turns the robot right.
 #define MOTOR_SWAP_SIDES false
 
-// Camera: XIAO ESP32S3 Sense DVP connector (OV2640 stock, OV5640 upgrade)
+// Camera: XIAO ESP32S3 Sense DVP connector (OV2640 or OV3660 stock, OV5640 upgrade)
 #define CAMERA_PIN_PWDN GPIO_NUM_NC
 #define CAMERA_PIN_RESET GPIO_NUM_NC
 #define CAMERA_PIN_XCLK GPIO_NUM_10
