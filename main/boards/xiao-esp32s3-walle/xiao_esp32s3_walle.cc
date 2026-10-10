@@ -19,6 +19,27 @@
 
 #define TAG "XiaoEsp32s3Walle"
 
+// The shared LcdDisplay shows camera previews at half the screen width, which
+// is too small to read on a 240x240 panel. Fit the preview to the full width.
+class WalleDisplay : public SpiLcdDisplay {
+public:
+    using SpiLcdDisplay::SpiLcdDisplay;
+
+    void SetPreviewImage(std::unique_ptr<LvglImage> image) override {
+        int image_width = 0;
+        if (image != nullptr && image->image_dsc() != nullptr) {
+            image_width = image->image_dsc()->header.w;
+        }
+        SpiLcdDisplay::SetPreviewImage(std::move(image));
+        if (image_width <= 0 || preview_image_ == nullptr) {
+            return;
+        }
+        DisplayLockGuard lock(this);
+        lv_obj_set_size(preview_image_, width(), height());
+        lv_image_set_scale(preview_image_, 256 * width() / image_width);
+    }
+};
+
 class XiaoEsp32s3Walle : public WifiBoard {
 private:
     Button boot_button_;
@@ -65,9 +86,9 @@ private:
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
         esp_lcd_panel_disp_on_off(panel, true);
 
-        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
-                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
-                                     DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        display_ =
+            new WalleDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X,
+                             DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
     void InitializeButtons() {
