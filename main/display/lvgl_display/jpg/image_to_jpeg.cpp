@@ -385,10 +385,31 @@ static bool encode_with_esp_new_jpeg(const uint8_t* src, size_t src_len, uint16_
     if (out_cap < 128 * 1024)
         out_cap = 128 * 1024;
     uint8_t* outbuf = (uint8_t*)malloc_psram(out_cap);
+    // The estimate above is a generous worst case; real JPEGs are far smaller.
+    // When memory is tight (camera + LCD on 8MB PSRAM), retry with smaller
+    // buffers instead of failing; jpeg_enc_process reports an overflow cleanly.
+    const size_t fallback_caps[] = {(size_t)width * (size_t)height / 2,
+                                    (size_t)width * (size_t)height / 4};
+    for (size_t cap : fallback_caps) {
+        if (outbuf || cap < 64 * 1024 || cap >= out_cap)
+            continue;
+        outbuf = (uint8_t*)malloc_psram(cap);
+        if (outbuf) {
+            ESP_LOGW(TAG, "out buffer %u bytes unavailable, using %u bytes", (unsigned)out_cap,
+                     (unsigned)cap);
+            out_cap = cap;
+        }
+    }
     if (!outbuf) {
         jpeg_enc_close(h);
         jpeg_free_align(enc_in);
+#if CONFIG_SPIRAM
+        ESP_LOGE(TAG, "alloc out buffer failed (PSRAM free %u, largest block %u)",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+#else
         ESP_LOGE(TAG, "alloc out buffer failed");
+#endif
         return false;
     }
 
