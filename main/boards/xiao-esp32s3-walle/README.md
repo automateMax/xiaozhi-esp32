@@ -56,6 +56,12 @@ HREF=47, PCLK=13; user LED=GPIO21.
   free for the amplifier and display.
 - Display CS is tied to GND, so the display uses SPI mode 3. The backlight is
   tied to 3V3 and is always on.
+- The `camera_hmirror` and `camera_vflip` build options are both on, which
+  rotates the image 180° for an OV3660 mounted in the WALL-E head. They apply to
+  whichever sensor is fitted, so check the orientation after swapping cameras.
+- The OV5640 module tested on this build gave a strong pink cast (green about
+  40% low at every brightness) that the stock OV3660 doesn't show. That points
+  to no IR-cut filter on the module; fit one before using an OV5640.
 - Don't use the Sense board's SD card slot. It shares GPIO7, GPIO8 and GPIO9
   with the display.
 - If a track runs backwards, set `MOTOR_LEFT_INVERT` or `MOTOR_RIGHT_INVERT` in

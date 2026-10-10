@@ -5,8 +5,8 @@
         {
             "name": "xiao-esp32s3-walle",
             "build_options": {
-                "camera_hmirror": false,
-                "camera_vflip": false
+                "camera_hmirror": true,
+                "camera_vflip": true
             },
             "sdkconfig_append": [
                 "CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y",
@@ -18,6 +18,8 @@
                 "CONFIG_CAMERA_OV2640_DVP_IF_FORMAT_INDEX_DEFAULT=1",
                 "CONFIG_CAMERA_OV3660=y",
                 "CONFIG_CAMERA_OV3660_AUTO_DETECT_DVP_INTERFACE_SENSOR=y",
+                "CONFIG_CAMERA_OV3660_DVP_YUV422_YUYV_640X480_10FPS=y",
+                "CONFIG_CAMERA_OV3660_DVP_DEFAULT_FMT_YUV422_YUYV_640X480_10FPS=y",
                 "CONFIG_CAMERA_OV5640=y",
                 "CONFIG_CAMERA_OV5640_AUTO_DETECT_DVP_INTERFACE_SENSOR=y",
                 "CONFIG_CAMERA_OV5640_DVP_YUV422_800X600_10FPS=y",
