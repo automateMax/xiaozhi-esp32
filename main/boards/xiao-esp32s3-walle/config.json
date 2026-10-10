@@ -1,0 +1,26 @@
+{
+    "type": "xiao-esp32s3-walle",
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "xiao-esp32s3-walle",
+            "build_options": {
+                "camera_hmirror": false,
+                "camera_vflip": false
+            },
+            "sdkconfig_append": [
+                "CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y",
+                "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/8m.csv\"",
+                "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y",
+                "CONFIG_CAMERA_OV2640=y",
+                "CONFIG_CAMERA_OV2640_AUTO_DETECT_DVP_INTERFACE_SENSOR=y",
+                "CONFIG_CAMERA_OV2640_DVP_YUV422_640X480_6FPS=y",
+                "CONFIG_CAMERA_OV2640_DVP_IF_FORMAT_INDEX_DEFAULT=1",
+                "CONFIG_CAMERA_OV5640=y",
+                "CONFIG_CAMERA_OV5640_AUTO_DETECT_DVP_INTERFACE_SENSOR=y",
+                "CONFIG_CAMERA_OV5640_DVP_YUV422_800X600_10FPS=y",
+                "CONFIG_CAMERA_OV5640_DVP_IF_FORMAT_INDEX_DEFAULT=0"
+            ]
+        }
+    ]
+}
