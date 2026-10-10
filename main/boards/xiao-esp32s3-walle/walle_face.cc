@@ -244,8 +244,12 @@ void WalleFace::Tick() {
         pulse_scale = 1.05f + 0.015f * sinf(kTwoPi * (now % 1600) / 1600.0f);
     }
 
-    // Talking mouth: a new random "syllable" every 80-160 ms, with short pauses.
-    if (mode_ == Mode::kSpeaking) {
+    // Talking mouth. With a voice level source the mouth follows the loudness
+    // of the audio actually playing; otherwise it makes random "syllables"
+    // every 80-160 ms while the device is in the speaking state.
+    if (voice_level_) {
+        syllable_ = std::clamp(voice_level_(), 0.0f, 1.0f);
+    } else if (mode_ == Mode::kSpeaking) {
         if (now >= next_syllable_ms_) {
             syllable_ = esp_random() % 6 == 0 ? 0.0f : 0.15f + RandomRange(0, 60) / 100.0f;
             next_syllable_ms_ = now + RandomRange(80, 160);

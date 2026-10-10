@@ -17,12 +17,55 @@
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <material_symbols.h>
 
+#include <algorithm>
+#include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
 #define TAG "XiaoEsp32s3Walle"
+
+// Measures how loud each block written to the speaker is, so the face can
+// move its mouth in time with the voice.
+class WalleAudioCodec : public NoAudioCodecSimplexPdm {
+public:
+    using NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm;
+
+    // 0..1; drops to 0 once nothing has been written for a moment.
+    float VoiceLevel() const {
+        int64_t age_us = esp_timer_get_time() - last_write_us_.load(std::memory_order_relaxed);
+        return age_us > kStaleUs ? 0.0f : level_.load(std::memory_order_relaxed);
+    }
+
+protected:
+    int Write(const int16_t* data, int samples) override {
+        if (data != nullptr && samples > 0) {
+            int64_t sum = 0;
+            int count = 0;
+            for (int i = 0; i < samples; i += 4) {
+                sum += std::abs(data[i]);
+                count++;
+            }
+            // Speech averages roughly 500-4000; ignore the noise floor.
+            float mean = static_cast<float>(sum) / count;
+            float level = std::clamp((mean - kNoiseFloor) / kFullScale, 0.0f, 1.0f);
+            level_.store(level, std::memory_order_relaxed);
+            last_write_us_.store(esp_timer_get_time(), std::memory_order_relaxed);
+        }
+        return NoAudioCodecSimplexPdm::Write(data, samples);
+    }
+
+private:
+    static constexpr int64_t kStaleUs = 150 * 1000;
+    static constexpr float kNoiseFloor = 250.0f;
+    static constexpr float kFullScale = 3000.0f;
+
+    std::atomic<float> level_{0.0f};
+    std::atomic<int64_t> last_write_us_{0};
+};
 
 // Shows WALL-E's animated eyes instead of the emoji, keeps the shared subtitle
 // bar, and falls back to the status icon for alerts (Wi-Fi, OTA, errors).
@@ -42,6 +85,9 @@ public:
 
         DisplayLockGuard lock(this);
         face_ = std::make_unique<WalleFace>(lv_screen_active(), width(), height());
+        if (voice_level_) {
+            face_->SetVoiceLevelSource(voice_level_);
+        }
         // Keep the eyes behind the status bar, subtitles and photo preview.
         lv_obj_move_to_index(face_->obj(), lv_obj_get_index(emoji_box_) + 1);
         lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
@@ -73,18 +119,41 @@ public:
         UpdateFaceVisibility();
     }
 
+    // Call before SetupUI().
+    void SetVoiceLevelSource(std::function<float()> source) { voice_level_ = std::move(source); }
+
+    // The face already shows what the robot is doing, so the common states
+    // get a small icon instead of a word.
     void SetStatus(const char* status) override {
-        SpiLcdDisplay::SetStatus(status);
-        if (face_ == nullptr || status == nullptr) {
+        if (status == nullptr) {
+            SpiLcdDisplay::SetStatus(status);
             return;
         }
-        DisplayLockGuard lock(this);
+        const char* icon = nullptr;
+        WalleFace::Mode mode = WalleFace::Mode::kIdle;
         if (strcmp(status, Lang::Strings::LISTENING) == 0) {
-            face_->SetMode(WalleFace::Mode::kListening);
+            icon = MATERIAL_SYMBOLS_MIC;
+            mode = WalleFace::Mode::kListening;
         } else if (strcmp(status, Lang::Strings::SPEAKING) == 0) {
-            face_->SetMode(WalleFace::Mode::kSpeaking);
-        } else {
-            face_->SetMode(WalleFace::Mode::kIdle);
+            icon = MATERIAL_SYMBOLS_VOLUME_UP;
+            mode = WalleFace::Mode::kSpeaking;
+        } else if (strcmp(status, Lang::Strings::CONNECTING) == 0) {
+            icon = MATERIAL_SYMBOLS_LINK;
+        } else if (strcmp(status, Lang::Strings::STANDBY) == 0) {
+            icon = "";
+        }
+        SpiLcdDisplay::SetStatus(icon != nullptr ? icon : status);
+
+        DisplayLockGuard lock(this);
+        if (status_label_ != nullptr && current_theme_ != nullptr) {
+            auto* theme = static_cast<LvglTheme*>(current_theme_);
+            auto font = icon != nullptr ? theme->icon_font() : theme->text_font();
+            if (font != nullptr) {
+                lv_obj_set_style_text_font(status_label_, font->font(), 0);
+            }
+        }
+        if (face_ != nullptr) {
+            face_->SetMode(mode);
         }
     }
 
@@ -109,6 +178,7 @@ public:
 
 private:
     std::unique_ptr<WalleFace> face_;
+    std::function<float()> voice_level_;
     bool face_active_ = true;
     bool previewing_ = false;
 
@@ -136,6 +206,7 @@ private:
     LcdDisplay* display_ = nullptr;
     EspVideo* camera_ = nullptr;
     WalleMotors* motors_ = nullptr;
+    std::atomic<WalleAudioCodec*> audio_codec_{nullptr};
 
     void InitializeSpi() {
         spi_bus_config_t buscfg = {};
@@ -176,9 +247,15 @@ private:
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
         esp_lcd_panel_disp_on_off(panel, true);
 
-        display_ =
+        auto* display =
             new WalleDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X,
                              DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        // The codec is created later, on first use, so read it through an atomic.
+        display->SetVoiceLevelSource([this]() {
+            WalleAudioCodec* codec = audio_codec_.load(std::memory_order_acquire);
+            return codec != nullptr ? codec->VoiceLevel() : 0.0f;
+        });
+        display_ = display;
     }
 
     void InitializeButtons() {
@@ -309,10 +386,11 @@ public:
     }
 
     virtual AudioCodec* GetAudioCodec() override {
-        static NoAudioCodecSimplexPdm audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
-                                                  AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK,
-                                                  AUDIO_I2S_SPK_GPIO_DOUT, AUDIO_I2S_MIC_GPIO_SCK,
-                                                  AUDIO_I2S_MIC_GPIO_DIN);
+        static WalleAudioCodec audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
+                                           AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK,
+                                           AUDIO_I2S_SPK_GPIO_DOUT, AUDIO_I2S_MIC_GPIO_SCK,
+                                           AUDIO_I2S_MIC_GPIO_DIN);
+        audio_codec_.store(&audio_codec, std::memory_order_release);
         return &audio_codec;
     }
 

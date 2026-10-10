@@ -4,6 +4,7 @@
 #include <lvgl.h>
 
 #include <cstdint>
+#include <functional>
 
 // Animated robot face (eyes and mouth) drawn with LVGL primitives: rounded
 // rectangles, triangles and arcs, so it needs no image assets in flash. The
@@ -24,6 +25,9 @@ public:
     void SetMode(Mode mode);
     void SetVisible(bool visible);
     lv_obj_t* obj() const { return obj_; }
+    // Loudness of the audio being played, 0..1. When set, the mouth follows it
+    // instead of animating from the speaking state. Called from the LVGL task.
+    void SetVoiceLevelSource(std::function<float()> source) { voice_level_ = std::move(source); }
 
 private:
     struct Pose {
@@ -104,6 +108,7 @@ private:
     float glance_x_ = 0.0f;
     float glance_y_ = 0.0f;
 
+    std::function<float()> voice_level_;
     uint32_t next_syllable_ms_ = 0;
     float syllable_ = 0.0f;
     float talk_open_ = 0.0f;
