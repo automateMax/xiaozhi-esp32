@@ -1,11 +1,14 @@
 #include "application.h"
+#include "assets/lang_config.h"
 #include "button.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
 #include "display/lcd_display.h"
+#include "display/lvgl_display/lvgl_theme.h"
 #include "esp_video.h"
 #include "led/gpio_led.h"
 #include "mcp_server.h"
+#include "walle_face.h"
 #include "walle_motors.h"
 #include "wifi_board.h"
 
@@ -14,29 +17,116 @@
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
+#include <material_symbols.h>
 
+#include <cstring>
 #include <string>
 
 #define TAG "XiaoEsp32s3Walle"
 
-// The shared LcdDisplay shows camera previews at half the screen width, which
-// is too small to read on a 240x240 panel. Fit the preview to the full width.
+// Shows WALL-E's animated eyes instead of the emoji, keeps the shared subtitle
+// bar, and falls back to the status icon for alerts (Wi-Fi, OTA, errors).
 class WalleDisplay : public SpiLcdDisplay {
 public:
     using SpiLcdDisplay::SpiLcdDisplay;
 
+    void SetupUI() override {
+        if (setup_ui_called_) {
+            return;
+        }
+        SpiLcdDisplay::SetupUI();
+        auto* dark_theme = LvglThemeManager::GetInstance().GetTheme("dark");
+        if (dark_theme != nullptr) {
+            SetTheme(dark_theme);
+        }
+
+        DisplayLockGuard lock(this);
+        face_ = std::make_unique<WalleFace>(lv_screen_active(), width(), height());
+        // Keep the eyes behind the status bar, subtitles and photo preview.
+        lv_obj_move_to_index(face_->obj(), lv_obj_get_index(emoji_box_) + 1);
+        lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void SetEmotion(const char* emotion) override {
+        if (face_ == nullptr || emotion == nullptr) {
+            SpiLcdDisplay::SetEmotion(emotion);
+            return;
+        }
+        bool show_icon = false;
+        {
+            DisplayLockGuard lock(this);
+            if (!face_->SetEmotion(emotion)) {
+                // Not a mood: alerts use Material Symbols icons (wifi, download,
+                // warning...). Unknown moods fall back to the neutral eyes.
+                show_icon = material_symbols_get_utf8(emotion) != nullptr;
+                if (!show_icon) {
+                    face_->SetEmotion("neutral");
+                }
+            }
+        }
+        if (show_icon) {
+            SpiLcdDisplay::SetEmotion(emotion);
+        }
+
+        DisplayLockGuard lock(this);
+        face_active_ = !show_icon;
+        UpdateFaceVisibility();
+    }
+
+    void SetStatus(const char* status) override {
+        SpiLcdDisplay::SetStatus(status);
+        if (face_ == nullptr || status == nullptr) {
+            return;
+        }
+        DisplayLockGuard lock(this);
+        if (strcmp(status, Lang::Strings::LISTENING) == 0) {
+            face_->SetMode(WalleFace::Mode::kListening);
+        } else if (strcmp(status, Lang::Strings::SPEAKING) == 0) {
+            face_->SetMode(WalleFace::Mode::kSpeaking);
+        } else {
+            face_->SetMode(WalleFace::Mode::kIdle);
+        }
+    }
+
+    // The shared LcdDisplay shows camera previews at half the screen width,
+    // which is too small to read on a 240x240 panel. Fit it to the full width.
     void SetPreviewImage(std::unique_ptr<LvglImage> image) override {
         int image_width = 0;
         if (image != nullptr && image->image_dsc() != nullptr) {
             image_width = image->image_dsc()->header.w;
         }
         SpiLcdDisplay::SetPreviewImage(std::move(image));
-        if (image_width <= 0 || preview_image_ == nullptr) {
+
+        DisplayLockGuard lock(this);
+        previewing_ = image_width > 0;
+        UpdateFaceVisibility();
+        if (!previewing_ || preview_image_ == nullptr) {
             return;
         }
-        DisplayLockGuard lock(this);
         lv_obj_set_size(preview_image_, width(), height());
         lv_image_set_scale(preview_image_, 256 * width() / image_width);
+    }
+
+private:
+    std::unique_ptr<WalleFace> face_;
+    bool face_active_ = true;
+    bool previewing_ = false;
+
+    // Call with the display lock held.
+    void UpdateFaceVisibility() {
+        if (face_ == nullptr) {
+            return;
+        }
+        face_->SetVisible(face_active_ && !previewing_);
+        if (face_active_) {
+            // Clear the icon too: the shared preview code unhides emoji_box_
+            // when a photo preview ends, which would otherwise flash it.
+            lv_label_set_text(emoji_label_, "");
+            lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+        } else if (!previewing_) {
+            lv_obj_remove_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+        }
     }
 };
 

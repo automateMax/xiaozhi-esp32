@@ -69,6 +69,17 @@ HREF=47, PCLK=13; user LED=GPIO21.
 - Every move stops on its own after at most 5 seconds, so a misheard command
   can't send the robot off the desk.
 
+## Face
+
+The screen shows animated eyes (`walle_face.cc`) instead of the default emoji.
+They're drawn with LVGL shapes, so they need no image assets. The eyes blink,
+glance around while idle, grow slightly while listening and pulse while
+speaking. Their shape and colour follow the `emotion` the server sends: for
+example happy, loving, sad, crying, angry, surprised, thinking, winking or
+sleepy. Unknown emotions show the neutral eyes. Alerts such as Wi-Fi setup, OTA
+or errors still show their status icon. What Pip says appears as a subtitle at
+the bottom of the screen.
+
 ## Build
 
 ```sh
