@@ -81,6 +81,12 @@ sleepy. Unknown emotions show the neutral eyes. Alerts such as Wi-Fi setup, OTA
 or errors still show their status icon. What Pip says appears as a subtitle at
 the bottom of the screen.
 
+## Wake words and language
+
+The build listens for two English wake words, "Hi Wall-E" and "Jarvis",
+instead of the Chinese default, and shows its on-screen text in English.
+"Jarvis" was the more reliable of the two in testing.
+
 ## Build
 
 ```sh
