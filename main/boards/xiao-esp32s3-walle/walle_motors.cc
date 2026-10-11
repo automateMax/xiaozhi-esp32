@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <mutex>
 
 #define TAG "WalleMotors"
 
@@ -71,25 +72,31 @@ WalleMotors::~WalleMotors() {
     SetOutputs(0, 0);
 }
 
-void WalleMotors::StopTimerCallback(void* arg) { static_cast<WalleMotors*>(arg)->SetOutputs(0, 0); }
-
-void WalleMotors::Drive(int left_speed, int right_speed) {
-    // Cancel a pending auto-stop so it cannot cut this new command short.
-    esp_timer_stop(stop_timer_);
-    SetOutputs(left_speed, right_speed);
+// Runs on the esp_timer task. esp_timer_stop() cannot cancel a callback that
+// has already started, so it only stops the command it was armed for.
+void WalleMotors::StopTimerCallback(void* arg) {
+    auto* motors = static_cast<WalleMotors*>(arg);
+    std::lock_guard<std::mutex> lock(motors->mutex_);
+    if (motors->command_ == motors->timed_command_) {
+        motors->SetOutputs(0, 0);
+    }
 }
 
+void WalleMotors::Drive(int left_speed, int right_speed) { DriveFor(left_speed, right_speed, 0); }
+
 void WalleMotors::DriveFor(int left_speed, int right_speed, int duration_ms) {
-    Drive(left_speed, right_speed);
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Cancel a pending auto-stop so it cannot cut this new command short.
+    esp_timer_stop(stop_timer_);
+    command_++;
+    SetOutputs(left_speed, right_speed);
     if (duration_ms > 0) {
+        timed_command_ = command_;
         esp_timer_start_once(stop_timer_, static_cast<uint64_t>(duration_ms) * 1000);
     }
 }
 
-void WalleMotors::Stop() {
-    esp_timer_stop(stop_timer_);
-    SetOutputs(0, 0);
-}
+void WalleMotors::Stop() { DriveFor(0, 0, 0); }
 
 void WalleMotors::SetOutputs(int left_speed, int right_speed) {
     SetMotor(kLeftChannelA, kLeftChannelB, left_invert_ ? -left_speed : left_speed);

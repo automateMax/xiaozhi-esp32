@@ -52,6 +52,9 @@ protected:
             // Speech averages roughly 500-4000; ignore the noise floor.
             float mean = static_cast<float>(sum) / count;
             float level = std::clamp((mean - kNoiseFloor) / kFullScale, 0.0f, 1.0f);
+            if (output_volume() == 0) {
+                level = 0.0f;  // muted: keep the mouth still
+            }
             level_.store(level, std::memory_order_relaxed);
             last_write_us_.store(esp_timer_get_time(), std::memory_order_relaxed);
         }
@@ -78,12 +81,17 @@ public:
             return;
         }
         SpiLcdDisplay::SetupUI();
-        auto* dark_theme = LvglThemeManager::GetInstance().GetTheme("dark");
-        if (dark_theme != nullptr) {
-            SetTheme(dark_theme);
+        if (current_theme_ != LvglThemeManager::GetInstance().GetTheme("dark")) {
+            SetTheme(current_theme_);  // switches a saved light theme to dark
         }
 
         DisplayLockGuard lock(this);
+        if (emoji_box_ == nullptr) {
+            // The WeChat message style has no emoji area to replace; keep the
+            // stock UI rather than drawing the face over the chat.
+            ESP_LOGW(TAG, "No emoji area, face disabled");
+            return;
+        }
         face_ = std::make_unique<WalleFace>(lv_screen_active(), width(), height());
         if (voice_level_) {
             face_->SetVoiceLevelSource(voice_level_);
@@ -91,6 +99,20 @@ public:
         // Keep the eyes behind the status bar, subtitles and photo preview.
         lv_obj_move_to_index(face_->obj(), lv_obj_get_index(emoji_box_) + 1);
         lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    // The face is designed for a black screen, so WALL-E always uses the
+    // dark theme, whatever is saved or requested. Same-theme calls still go
+    // through: the shared code uses them to rebind fonts.
+    void SetTheme(Theme* theme) override {
+        auto* dark_theme = LvglThemeManager::GetInstance().GetTheme("dark");
+        if (dark_theme != nullptr) {
+            theme = dark_theme;
+        }
+        if (theme == nullptr) {
+            return;
+        }
+        SpiLcdDisplay::SetTheme(theme);
     }
 
     void SetEmotion(const char* emotion) override {

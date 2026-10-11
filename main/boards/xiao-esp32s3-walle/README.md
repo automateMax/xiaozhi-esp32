@@ -77,9 +77,14 @@ image assets. The eyes blink, glance around while idle, grow slightly while
 listening and pulse while speaking. The mouth opens and closes while speaking.
 The face's shape and colour follow the `emotion` the server sends: for
 example happy, loving, sad, crying, angry, surprised, thinking, winking or
-sleepy. Unknown emotions show the neutral eyes. Alerts such as Wi-Fi setup, OTA
-or errors still show their status icon. What Pip says appears as a subtitle at
-the bottom of the screen.
+sleepy. Unknown emotions show the neutral eyes. Alerts that come with a
+Material Symbols icon, such as OTA downloads or server errors, show that icon
+instead of the eyes. What the robot says appears as a subtitle at the bottom
+of the screen.
+
+The face always uses the dark theme: a request to switch to the light theme is
+ignored. With the WeChat message style there is no emoji area, so the board
+keeps the stock chat screen and does not draw the face.
 
 ## Build
 

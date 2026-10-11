@@ -31,6 +31,11 @@ constexpr uint32_t kTearColor = 0x8FD8FF;
 
 uint32_t RandomRange(uint32_t min, uint32_t max) { return min + esp_random() % (max - min + 1); }
 
+// The LVGL tick wraps every 49.7 days; compare by signed difference.
+bool TimeReached(uint32_t now, uint32_t deadline) {
+    return static_cast<int32_t>(now - deadline) >= 0;
+}
+
 void Approach(float& value, float target) {
     value += (target - value) * kEase;
     if (std::fabs(target - value) < 0.002f) {
@@ -111,6 +116,10 @@ WalleFace::WalleFace(lv_obj_t* parent, int width, int height) : width_(width), h
     lv_obj_remove_style_all(obj_);
     lv_obj_set_size(obj_, width_, height_);
     lv_obj_set_pos(obj_, 0, 0);
+    // The lids, smile cuts and open mouth are drawn in black, so the face
+    // brings its own black background and stays correct under any theme.
+    lv_obj_set_style_bg_color(obj_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(obj_, LV_OPA_COVER, 0);
     lv_obj_remove_flag(obj_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(obj_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(obj_, DrawCallback, LV_EVENT_DRAW_MAIN, this);
@@ -145,8 +154,11 @@ bool WalleFace::SetEmotion(const char* emotion) {
         // seconds. Let a mood linger for a while before going neutral.
         bool is_neutral = &expression == &kExpressions[0];
         if (is_neutral && active_ != &kExpressions[0]) {
-            neutral_pending_ = true;
-            neutral_at_ms_ = lv_tick_get() + kMoodHoldMs;
+            // Repeated neutral requests must not keep extending the hold.
+            if (!neutral_pending_) {
+                neutral_pending_ = true;
+                neutral_at_ms_ = lv_tick_get() + kMoodHoldMs;
+            }
             return true;
         }
         neutral_pending_ = false;
@@ -171,6 +183,9 @@ void WalleFace::Apply(const Expression& expression) {
 void WalleFace::SetMode(Mode mode) { mode_ = mode; }
 
 void WalleFace::SetVisible(bool visible) {
+    if (visible == visible_) {
+        return;
+    }
     visible_ = visible;
     if (visible) {
         lv_obj_remove_flag(obj_, LV_OBJ_FLAG_HIDDEN);
@@ -196,14 +211,14 @@ void WalleFace::Tick() {
     }
     uint32_t now = lv_tick_get();
 
-    if (neutral_pending_ && static_cast<int32_t>(now - neutral_at_ms_) >= 0) {
+    if (neutral_pending_ && TimeReached(now, neutral_at_ms_)) {
         neutral_pending_ = false;
         Apply(kExpressions[0]);
     }
 
     // Blink every few seconds, sometimes twice in a row.
     float blink = 1.0f;
-    if (!blinking_ && now >= next_blink_ms_ && target_.open > 0.4f) {
+    if (!blinking_ && TimeReached(now, next_blink_ms_) && target_.open > 0.4f) {
         blinking_ = true;
         blink_start_ms_ = now;
     }
@@ -223,7 +238,7 @@ void WalleFace::Tick() {
     if (mode_ == Mode::kSpeaking) {
         glance_x_ = 0.0f;
         glance_y_ = 0.0f;
-    } else if (now >= next_glance_ms_) {
+    } else if (TimeReached(now, next_glance_ms_)) {
         if (esp_random() % 3 == 0) {
             glance_x_ = 0.0f;
             glance_y_ = 0.0f;
@@ -250,7 +265,7 @@ void WalleFace::Tick() {
     if (voice_level_) {
         syllable_ = std::clamp(voice_level_(), 0.0f, 1.0f);
     } else if (mode_ == Mode::kSpeaking) {
-        if (now >= next_syllable_ms_) {
+        if (TimeReached(now, next_syllable_ms_)) {
             syllable_ = esp_random() % 6 == 0 ? 0.0f : 0.15f + RandomRange(0, 60) / 100.0f;
             next_syllable_ms_ = now + RandomRange(80, 160);
         }

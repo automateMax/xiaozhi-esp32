@@ -5,6 +5,9 @@
 #include <driver/ledc.h>
 #include <esp_timer.h>
 
+#include <cstdint>
+#include <mutex>
+
 // Two DC track motors on an MX1508-style dual H-bridge. Each motor uses two
 // PWM inputs: PWM on input A drives forward, PWM on input B drives backward.
 class WalleMotors {
@@ -27,6 +30,9 @@ private:
     bool left_invert_;
     bool right_invert_;
     esp_timer_handle_t stop_timer_ = nullptr;
+    std::mutex mutex_;
+    uint32_t command_ = 0;        // bumped by every Drive, DriveFor and Stop
+    uint32_t timed_command_ = 0;  // the command the auto-stop timer belongs to
 };
 
 #endif  // WALLE_MOTORS_H
