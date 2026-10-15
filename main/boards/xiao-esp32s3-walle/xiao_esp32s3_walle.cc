@@ -8,7 +8,9 @@
 #include "esp_video.h"
 #include "led/gpio_led.h"
 #include "mcp_server.h"
+#include "settings.h"
 #include "walle_face.h"
+#include "walle_health.h"
 #include "walle_motors.h"
 #include "walle_sequence.h"
 #include "wifi_board.h"
@@ -18,6 +20,7 @@
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
+#include <esp_system.h>
 #include <esp_timer.h>
 #include <material_symbols.h>
 
@@ -225,6 +228,34 @@ private:
     }
 };
 
+// Short names the server groups resets by.
+static const char* ResetReasonName(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON:
+            return "power_on";
+        case ESP_RST_EXT:
+            return "external";
+        case ESP_RST_SW:
+            return "software";
+        case ESP_RST_PANIC:
+            return "panic";
+        case ESP_RST_INT_WDT:
+            return "int_wdt";
+        case ESP_RST_TASK_WDT:
+            return "task_wdt";
+        case ESP_RST_WDT:
+            return "wdt";
+        case ESP_RST_DEEPSLEEP:
+            return "deep_sleep";
+        case ESP_RST_BROWNOUT:
+            return "brownout";
+        case ESP_RST_USB:
+            return "usb";
+        default:
+            return "other";
+    }
+}
+
 class XiaoEsp32s3Walle : public WifiBoard {
 private:
     Button boot_button_;
@@ -232,6 +263,26 @@ private:
     EspVideo* camera_ = nullptr;
     WalleMotors* motors_ = nullptr;
     std::atomic<WalleAudioCodec*> audio_codec_{nullptr};
+    std::string reset_reason_;
+    walle::HealthCounters health_;
+
+    // Counts this boot by reset reason in NVS, once, so the server can see
+    // brown-outs and crashes that happened while nobody was watching.
+    void RecordBoot() {
+        reset_reason_ = ResetReasonName(esp_reset_reason());
+        Settings settings("walle_health", true);
+        health_.boots = settings.GetInt("boots");
+        health_.brownouts = settings.GetInt("brownouts");
+        health_.panics = settings.GetInt("panics");
+        health_.watchdogs = settings.GetInt("watchdogs");
+        walle::CountBoot(health_, reset_reason_);
+        settings.SetInt("boots", health_.boots);
+        settings.SetInt("brownouts", health_.brownouts);
+        settings.SetInt("panics", health_.panics);
+        settings.SetInt("watchdogs", health_.watchdogs);
+        ESP_LOGI(TAG, "Boot %d, reset reason %s", static_cast<int>(health_.boots),
+                 reset_reason_.c_str());
+    }
 
     void InitializeSpi() {
         spi_bus_config_t buscfg = {};
@@ -431,6 +482,7 @@ public:
     XiaoEsp32s3Walle() : boot_button_(BOOT_BUTTON_GPIO) {
         // Motors first, so the H-bridge inputs are driven low as early as possible.
         InitializeMotors();
+        RecordBoot();
         InitializeSpi();
         InitializeDisplay();
         InitializeButtons();
@@ -453,6 +505,10 @@ public:
     }
 
     virtual Display* GetDisplay() override { return display_; }
+
+    virtual std::string GetBoardJson() override {
+        return walle::AppendHealthJson(WifiBoard::GetBoardJson(), health_, reset_reason_);
+    }
 
     virtual Camera* GetCamera() override { return camera_; }
 };
