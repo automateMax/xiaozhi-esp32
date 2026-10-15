@@ -73,13 +73,48 @@ WalleMotors::~WalleMotors() {
 }
 
 // Runs on the esp_timer task. esp_timer_stop() cannot cancel a callback that
-// has already started, so it only stops the command it was armed for.
+// has already started, so a callback that was waiting for the lock while a new
+// command re-armed the timer must not act: it fires before the new deadline.
 void WalleMotors::StopTimerCallback(void* arg) {
     auto* motors = static_cast<WalleMotors*>(arg);
     std::lock_guard<std::mutex> lock(motors->mutex_);
-    if (motors->command_ == motors->timed_command_) {
-        motors->SetOutputs(0, 0);
+    if (motors->command_ != motors->timed_command_ ||
+        esp_timer_get_time() + kTimerSlackUs < motors->deadline_us_) {
+        return;
     }
+    if (motors->next_step_ < motors->steps_.size()) {
+        motors->StartStepLocked();
+        return;
+    }
+    motors->steps_.clear();
+    motors->SetOutputs(0, 0);
+}
+
+void WalleMotors::RunSequence(std::vector<walle::SequenceStep> steps) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    esp_timer_stop(stop_timer_);
+    command_++;
+    steps_ = std::move(steps);
+    next_step_ = 0;
+    if (steps_.empty()) {
+        SetOutputs(0, 0);
+        return;
+    }
+    timed_command_ = command_;
+    StartStepLocked();
+}
+
+// Call with mutex_ held. Applies the next step and arms the timer to end it.
+void WalleMotors::StartStepLocked() {
+    const auto& step = steps_[next_step_++];
+    SetOutputs(step.left, step.right);
+    ArmTimerLocked(step.ms);
+}
+
+// Call with mutex_ held.
+void WalleMotors::ArmTimerLocked(int duration_ms) {
+    deadline_us_ = esp_timer_get_time() + static_cast<int64_t>(duration_ms) * 1000;
+    esp_timer_start_once(stop_timer_, static_cast<uint64_t>(duration_ms) * 1000);
 }
 
 void WalleMotors::Drive(int left_speed, int right_speed) { DriveFor(left_speed, right_speed, 0); }
@@ -89,10 +124,11 @@ void WalleMotors::DriveFor(int left_speed, int right_speed, int duration_ms) {
     // Cancel a pending auto-stop so it cannot cut this new command short.
     esp_timer_stop(stop_timer_);
     command_++;
+    steps_.clear();  // a direct command replaces any running sequence
     SetOutputs(left_speed, right_speed);
     if (duration_ms > 0) {
         timed_command_ = command_;
-        esp_timer_start_once(stop_timer_, static_cast<uint64_t>(duration_ms) * 1000);
+        ArmTimerLocked(duration_ms);
     }
 }
 

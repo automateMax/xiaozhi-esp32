@@ -10,6 +10,7 @@
 #include "mcp_server.h"
 #include "walle_face.h"
 #include "walle_motors.h"
+#include "walle_sequence.h"
 #include "wifi_board.h"
 
 #include <driver/spi_common.h>
@@ -25,6 +26,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
+#include <vector>
 
 #define TAG "XiaoEsp32s3Walle"
 
@@ -382,6 +385,39 @@ private:
                     return false;
                 }
                 return true;
+            });
+
+        mcp_server.AddTool(
+            "self.walle.sequence",
+            "Play a short choreography on WALL-E's tracks, timed on the robot, for smooth "
+            "dances and gestures. Runs in the background and stops by itself.\n"
+            "Args:\n"
+            "  `steps`: comma-separated steps. `F75:600` forward at speed 75 for 600 ms, "
+            "`B` backward, `L` / `R` turn left / right in place, `T40/90:1200` left/right "
+            "track speeds -100..100 (arcs), `P:400` pause. Speeds 1-100, each step "
+            "20-3000 ms, at most 32 steps and 10 s in total.\n"
+            "  `repeat`: play the steps 1-5 times.\n"
+            "Example nod: `F70:150,B70:150,F70:150,B70:150`.",
+            PropertyList({Property("steps", kPropertyTypeString),
+                          Property("repeat", kPropertyTypeInteger, 1, 1, 5)}),
+            [this](const PropertyList& properties) -> ToolResult {
+                std::vector<walle::SequenceStep> steps;
+                std::string error;
+                if (!walle::ParseSequence(properties["steps"].value<std::string>(),
+                                          properties["repeat"].value<int>(), steps, error)) {
+                    return std::unexpected("Invalid steps: " + error);
+                }
+                if (MOTOR_SWAP_SIDES) {
+                    for (auto& step : steps) {
+                        std::swap(step.left, step.right);
+                    }
+                }
+                int total_ms = 0;
+                for (const auto& step : steps) {
+                    total_ms += step.ms;
+                }
+                motors_->RunSequence(std::move(steps));
+                return ReturnValue("Playing " + std::to_string(total_ms) + " ms of moves.");
             });
 
         mcp_server.AddTool("self.walle.stop", "Stop WALL-E's tracks immediately.", PropertyList(),

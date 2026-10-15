@@ -3,7 +3,7 @@
 A small WALL-E desk robot built on the Seeed Studio XIAO ESP32-S3 Sense. It talks
 and listens through XiaoZhi, sees through the Sense camera, shows its face on a
 1.54" screen, and drives on two tracks. The AI can drive it by voice through the
-`self.walle.move` and `self.walle.stop` MCP tools.
+`self.walle.move`, `self.walle.sequence` and `self.walle.stop` MCP tools.
 
 The wiring follows Huy Vector's WALL-E AI build. This board runs the XiaoZhi
 firmware, not Huy Vector's own firmware.
@@ -108,4 +108,20 @@ If the board doesn't enter download mode, hold BOOT while plugging in USB.
 | Tool | Arguments |
 |---|---|
 | `self.walle.move` | `direction`: `forward`, `backward`, `left`, `right`; `speed`: 1-100; `duration_ms`: 100-5000 |
+| `self.walle.sequence` | `steps`: comma-separated steps; `repeat`: 1-5 |
 | `self.walle.stop` | none |
+
+`self.walle.sequence` plays a short choreography timed on the robot, so dances
+and gestures stay smooth whatever the Wi-Fi does. Steps:
+
+| Step | Meaning |
+|---|---|
+| `F75:600` | forward at speed 75 for 600 ms |
+| `B70:300` | backward |
+| `L70:300`, `R70:300` | turn left or right in place |
+| `T40/90:1200` | left and right track speeds, -100..100, for arcs |
+| `P:400` | pause with the motors off |
+
+Speeds are 1-100 and each step 20-3000 ms, with at most 32 steps and 10 s in
+total. A nod is `F70:150,B70:150,F70:150,B70:150`. Any move, stop or new
+sequence cancels the one that is running.
